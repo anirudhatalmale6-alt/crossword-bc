@@ -2,14 +2,15 @@
    Crossword matching game
 
    How BC (the blinking cell) travels:
-     - rightward along a word, one cell per correct letter
-     - if it is walled in on the right by a black square or the grid
-       edge, it turns and works downward until that word is finished
+     - it works through one word at a time, in the order set by
+       WORD_ORDER below - change that list to change the order
+     - inside a word it runs left to right, or top to bottom if it
+       is a down word
      - a letter already filled in by a crossing word is stepped over,
        never asked for twice
-     - when the word runs out it jumps to the next empty cell,
-       reading the grid top to bottom, left to right
-   On this puzzle that path covers all 44 cells with none stranded.
+     - when a word is finished it moves to the next word in the list
+       that still has empty cells
+   On this puzzle that covers all 44 cells with none stranded.
 
    Fixes in this rewrite:
    1. Win is counted from the grid (44 cells) not a hardcoded 24, so
@@ -58,9 +59,6 @@ let selectedCell = null;
 let correct = 0;
 let total = 0;
 let finished = false;
-
-/* Which way BC travels after a correct letter: 'across' or 'down'. */
-let direction = 'across';
 
 /* ---------------------------------------------------------------- */
 /* Cells                                                             */
@@ -123,24 +121,56 @@ function step(cell, direction, distance) {
     : cellAt(at.r, at.c + distance);
 }
 
-/* The black squares, worked out once at load.
+/* ---------------------------------------------------------------- */
+/* Words                                                             */
+/* ---------------------------------------------------------------- */
 
-   This has to tell a black square apart from the pale spacer cells
-   that pad the grid out to ten columns, because the two behave
-   differently: a black square turns BC downward, a spacer does not.
-   The E at the end of BAKE has a spacer to its right, and BC has to
-   carry on to the next row from there rather than dive down. */
-const blackCells = new Set(
-  allCells.filter(cell =>
-    !cell.dataset.pair &&
-    getComputedStyle(cell).backgroundColor === 'rgb(0, 0, 0)')
-);
+/* The order BC works through the puzzle.
 
-/* Is BC walled in on its right? A black square, or the grid edge. */
-function blockedRight(cell) {
-  const right = step(cell, 'across', 1);
-  return !right || blackCells.has(right);
+   THIS LIST IS THE ORDER. To change it, reorder these words - there
+   is nothing else to edit. Any word on the board that is missing
+   from the list still gets played, after all the listed ones, so
+   the puzzle can always be finished. */
+const WORD_ORDER = [
+  'bake', 'beat', 'arms', 'melt', 'earn', 'mind', 'lava', 'able',
+  'need', 'draw', 'tend', 'wish', 'tear', 'idle', 'hear', 'ease'
+];
+
+/* Every across and down run of two or more letters on the board,
+   read straight off the grid - no answer list to keep in step. */
+function findWords() {
+  const found = [];
+  allCells.forEach(cell => {
+    if (!isPlayable(cell)) return;
+    ['across', 'down'].forEach(dir => {
+      const before = step(cell, dir, -1);
+      const after = step(cell, dir, 1);
+      if (isPlayable(before) || !isPlayable(after)) return;   // not a start
+      const cells = [];
+      for (let d = 0; ; d += 1) {
+        const next = step(cell, dir, d);
+        if (!isPlayable(next)) break;
+        cells.push(next);
+      }
+      found.push({ dir, cells, text: cells.map(c => c.dataset.pair).join('') });
+    });
+  });
+  return found;
 }
+
+/* Sorted into playing order. Unlisted words fall to the back, and
+   Array.sort is stable so they keep their grid order among
+   themselves. */
+const rank = word => {
+  const i = WORD_ORDER.indexOf(word.text);
+  return i < 0 ? WORD_ORDER.length : i;
+};
+const words = findWords().sort((a, b) => rank(a) - rank(b));
+
+/* The word BC is currently working through. */
+let currentWord = null;
+
+const wordsWith = cell => words.filter(word => word.cells.includes(cell));
 
 /* ---------------------------------------------------------------- */
 /* Selection                                                         */
@@ -158,54 +188,30 @@ function selectCell(cell) {
   cell.classList.add('selected');
 }
 
-/* Start the player on clue 1. */
-function selectInitialCell() {
-  const first = allCells.find(
-    cell => cell.querySelector('span')?.textContent.trim() === '1'
-  );
-  if (first) selectCell(first);
-}
+/* Where BC goes next.
 
-/* Next unfilled cell along, in one direction. Stops dead at a black
-   square, a spacer or the grid edge, and steps over any letter a
-   crossing word has already filled in. */
-function nextInRun(from, dir) {
-  for (let d = 1; ; d += 1) {
-    const next = step(from, dir, d);
-    if (!next || !isPlayable(next)) return null;   // run ended
-    if (!isSolved(next)) return next;
-  }
-}
-
-/* Nothing left in this word - find the next empty cell on the board,
-   reading top to bottom, left to right. */
-const nextByScan = () => allCells.find(isOpen) || null;
-
-/* Where BC goes after a correct letter.
-
-   Rightward along the word. If it is walled in on the right it turns
-   and works downward instead, and keeps going down until that word
-   is finished, whatever is to its right on the way. When the word
-   runs out it jumps to the next empty cell on the board. */
-function advanceAfterCorrect(from) {
-  let next = null;
-
-  if (direction === 'down') {
-    next = nextInRun(from, 'down');
-    if (!next) direction = 'across';          // down word finished
-  } else if (blockedRight(from)) {
-    next = nextInRun(from, 'down');
-    if (next) direction = 'down';             // turn and descend
-  } else {
-    next = nextInRun(from, 'across');
+   It finishes the word it is on, then moves to the next word in
+   WORD_ORDER that still has empty cells. Within a word it runs
+   left to right, or top to bottom for a down word, and steps over
+   any letter a crossing word has already filled in - the player is
+   never asked for the same letter twice. */
+function advance() {
+  if (currentWord) {
+    const rest = currentWord.cells.find(isOpen);
+    if (rest) { selectCell(rest); return; }    // same word, next gap
   }
 
-  if (!next) {
-    direction = 'across';
-    next = nextByScan();
+  for (const word of words) {
+    const cell = word.cells.find(isOpen);
+    if (cell) {
+      currentWord = word;
+      selectCell(cell);
+      return;
+    }
   }
 
-  selectCell(next);
+  currentWord = null;      // board finished
+  clearSelection();
 }
 
 /* ---------------------------------------------------------------- */
@@ -283,10 +289,10 @@ grid.addEventListener('click', event => {
   if (cell === selectedCell) {
     clearSelection();          // click the selected cell again to drop it
   } else {
-    /* Picking a cell by hand starts BC off rightward again. If that
-       cell is walled in on the right it will turn downward by itself
-       on the next correct letter. */
-    direction = 'across';
+    /* Picking a cell by hand switches BC to the word that cell
+       belongs to, so it carries on from there rather than snapping
+       back to wherever it was. */
+    currentWord = wordsWith(cell).find(word => word.cells.some(isOpen)) || null;
     selectCell(cell);
   }
 });
@@ -312,7 +318,7 @@ abcContainer.addEventListener('click', event => {
     selectedCell = null;
 
     playSound('correct');
-    advanceAfterCorrect(solvedCell);
+    advance();
   } else {
     playSound('wrong');
   }
@@ -326,4 +332,5 @@ abcContainer.addEventListener('click', event => {
 /* Go                                                                */
 /* ---------------------------------------------------------------- */
 
-selectInitialCell();
+/* Starts BC on the first empty cell of the first word in the order. */
+advance();
