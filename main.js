@@ -182,32 +182,59 @@ const wordsWith = cell => words.filter(word => word.cells.includes(cell));
 /* The direction arrow inside BC                                     */
 /* ---------------------------------------------------------------- */
 
+/* ---- THE LOOK OF THE ARROW - change these to taste -------------
+
+   shape   any character you like. These pairs are all checked -
+           each really does render as a right one and a down one:
+             ▶ ▼   solid triangles (what it uses now)
+             ▸ ▾   the same but smaller and lighter
+             ➡ ⬇   chunky block arrows, very clear
+             ➜ ⬇   arrow with a tail
+             ⇒ ⇓   double arrows
+             → ↓   thin line arrows - these go very faint on the
+                   salmon cell, so raise the size if you use them
+           Careful picking your own: a lot of arrow characters that
+           look like a pair are not. ➙ and ➤ are BOTH right arrows,
+           and ⬆ is an up arrow, so those make a nonsense pair.
+   colour  any CSS colour: 'red', 'white', '#11248f', '#000'
+   size    in rem. The cell is 7rem wide, so 2.8rem is about
+           two fifths of it. 2rem is discreet, 3.5rem is bold.
+   corner  which corner it sits in - 'bottom right', 'bottom left',
+           'top right'. Avoid 'top left', the clue number is there.
+   ---------------------------------------------------------------- */
+const ARROW_LOOK = {
+  shapeAcross: '▶',
+  shapeDown:   '▼',
+  colour:      '#11248f',
+  size:        '2.8rem',
+  corner:      'bottom right'
+};
+
+const ARROWS = { across: ARROW_LOOK.shapeAcross, down: ARROW_LOOK.shapeDown };
+
 /* Styles are injected from here on purpose, so this stays a
    one-file change - there is nothing to add to main.css.
    The selector is .cell span.bc-arrow rather than .bc-arrow because
    main.css already pins every span inside a cell to the top left
    corner, and this has to beat that. */
+const corner = ARROW_LOOK.corner.toLowerCase();
 const arrowStyle = document.createElement('style');
 arrowStyle.textContent = `
   .cell span.bc-arrow {
     position: absolute;
-    top: auto;
-    left: auto;
-    right: 0.4rem;
-    bottom: 0.2rem;
-    font-size: 2.8rem;
+    top:    ${corner.includes('top') ? '0.2rem' : 'auto'};
+    bottom: ${corner.includes('top') ? 'auto' : '0.2rem'};
+    left:   ${corner.includes('left') ? '0.4rem' : 'auto'};
+    right:  ${corner.includes('left') ? 'auto' : '0.4rem'};
+    font-size: ${ARROW_LOOK.size};
     line-height: 1;
     font-weight: bold;
-    color: #11248f;
+    color: ${ARROW_LOOK.colour};
     cursor: pointer;
     user-select: none;
   }
 `;
 document.head.appendChild(arrowStyle);
-
-/* Solid triangles rather than → and ↓ - a line arrow has very little
-   ink and all but disappears at this size against the salmon. */
-const ARROWS = { across: '▶', down: '▼' };
 
 const arrow = document.createElement('span');
 arrow.className = 'bc-arrow';
