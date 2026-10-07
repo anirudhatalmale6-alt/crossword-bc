@@ -1,6 +1,12 @@
 /* ==================================================================
    Crossword matching game
 
+   BC carries an arrow showing which way it will move on the next
+   correct letter: a right arrow for across, a down arrow for down.
+   Clicking BC turns the arrow, switching to the word that crosses
+   it at that cell. On a cell that belongs to only one word there is
+   nothing to turn to, so the arrow stays put.
+
    How BC (the blinking cell) travels:
      - it works through one word at a time, in the order set by
        WORD_ORDER below - change that list to change the order
@@ -173,10 +179,77 @@ let currentWord = null;
 const wordsWith = cell => words.filter(word => word.cells.includes(cell));
 
 /* ---------------------------------------------------------------- */
+/* The direction arrow inside BC                                     */
+/* ---------------------------------------------------------------- */
+
+/* Styles are injected from here on purpose, so this stays a
+   one-file change - there is nothing to add to main.css.
+   The selector is .cell span.bc-arrow rather than .bc-arrow because
+   main.css already pins every span inside a cell to the top left
+   corner, and this has to beat that. */
+const arrowStyle = document.createElement('style');
+arrowStyle.textContent = `
+  .cell span.bc-arrow {
+    position: absolute;
+    top: auto;
+    left: auto;
+    right: 0.4rem;
+    bottom: 0.2rem;
+    font-size: 2.8rem;
+    line-height: 1;
+    font-weight: bold;
+    color: #11248f;
+    cursor: pointer;
+    user-select: none;
+  }
+`;
+document.head.appendChild(arrowStyle);
+
+/* Solid triangles rather than → and ↓ - a line arrow has very little
+   ink and all but disappears at this size against the salmon. */
+const ARROWS = { across: '▶', down: '▼' };
+
+const arrow = document.createElement('span');
+arrow.className = 'bc-arrow';
+arrow.title = 'Click to switch between across and down';
+
+/* Which way BC will move on the next correct letter. */
+function currentDirection() {
+  if (currentWord && currentWord.cells.includes(selectedCell)) {
+    return currentWord.dir;
+  }
+  const word = selectedCell ? wordsWith(selectedCell)[0] : null;
+  return word ? word.dir : 'across';
+}
+
+/* Put the arrow in BC, pointing the way BC will go. */
+function drawArrow() {
+  if (!selectedCell) {
+    arrow.remove();
+    return;
+  }
+  arrow.textContent = ARROWS[currentDirection()];
+  selectedCell.appendChild(arrow);
+}
+
+/* Turn BC the other way, by switching to the word that crosses it
+   here. Does nothing on a cell that only belongs to one word -
+   there would be nowhere to go. */
+function turnArrow() {
+  if (!selectedCell) return;
+  const crossing = wordsWith(selectedCell)
+    .find(word => word.dir !== currentDirection());
+  if (!crossing) return;
+  currentWord = crossing;
+  drawArrow();
+}
+
+/* ---------------------------------------------------------------- */
 /* Selection                                                         */
 /* ---------------------------------------------------------------- */
 
 function clearSelection() {
+  arrow.remove();
   if (selectedCell) selectedCell.classList.remove('selected');
   selectedCell = null;
 }
@@ -186,6 +259,7 @@ function selectCell(cell) {
   clearSelection();
   selectedCell = cell;
   cell.classList.add('selected');
+  drawArrow();
 }
 
 /* Where BC goes next.
@@ -287,7 +361,7 @@ grid.addEventListener('click', event => {
   if (!cell || !isOpen(cell)) return;
 
   if (cell === selectedCell) {
-    clearSelection();          // click the selected cell again to drop it
+    turnArrow();               // click BC itself to turn the arrow
   } else {
     /* Picking a cell by hand switches BC to the word that cell
        belongs to, so it carries on from there rather than snapping
