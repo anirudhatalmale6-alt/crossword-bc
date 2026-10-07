@@ -199,15 +199,16 @@ const wordsWith = cell => words.filter(word => word.cells.includes(cell));
    colour  any CSS colour: 'red', 'white', '#11248f', '#000'
    size    in rem. The cell is 7rem wide, so 2.8rem is about
            two fifths of it. 2rem is discreet, 3.5rem is bold.
-   corner  which corner it sits in - 'bottom right', 'bottom left',
+   corner  where it sits: 'center', 'bottom right', 'bottom left',
            'top right'. Avoid 'top left', the clue number is there.
+           'center' gives it the most room, so it suits a big arrow.
    ---------------------------------------------------------------- */
 const ARROW_LOOK = {
   shapeAcross: '▶',
   shapeDown:   '▼',
-  colour:      '#11248f',
-  size:        '2.8rem',
-  corner:      'bottom right'
+  colour:      'green',
+  size:        '4.5rem',
+  corner:      'center'
 };
 
 const ARROWS = { across: ARROW_LOOK.shapeAcross, down: ARROW_LOOK.shapeDown };
@@ -218,14 +219,24 @@ const ARROWS = { across: ARROW_LOOK.shapeAcross, down: ARROW_LOOK.shapeDown };
    main.css already pins every span inside a cell to the top left
    corner, and this has to beat that. */
 const corner = ARROW_LOOK.corner.toLowerCase();
+const centred = corner.includes('cent');     // 'center' or 'centre'
+
+const placement = centred
+  ? `top: 50%;
+    left: 50%;
+    right: auto;
+    bottom: auto;
+    transform: translate(-50%, -50%);`
+  : `top:    ${corner.includes('top') ? '0.2rem' : 'auto'};
+    bottom: ${corner.includes('top') ? 'auto' : '0.2rem'};
+    left:   ${corner.includes('left') ? '0.4rem' : 'auto'};
+    right:  ${corner.includes('left') ? 'auto' : '0.4rem'};`;
+
 const arrowStyle = document.createElement('style');
 arrowStyle.textContent = `
   .cell span.bc-arrow {
     position: absolute;
-    top:    ${corner.includes('top') ? '0.2rem' : 'auto'};
-    bottom: ${corner.includes('top') ? 'auto' : '0.2rem'};
-    left:   ${corner.includes('left') ? '0.4rem' : 'auto'};
-    right:  ${corner.includes('left') ? 'auto' : '0.4rem'};
+    ${placement}
     font-size: ${ARROW_LOOK.size};
     line-height: 1;
     font-weight: bold;
